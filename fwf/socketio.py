@@ -43,6 +43,7 @@ class IO(object):
                 fd, event = self._events.popitem()
 
                 try:
+                    import pdb; pdb.set_trace()
                     self._handlers[fd](fd, event)
                 except (KeyboardInterrupt, SystemExit):
                     raise
@@ -60,7 +61,8 @@ class IO(object):
 
 if __name__ == "__main__":
     import functools, errno
-    
+    io = IO.instance()
+
     def callback(sock, fd, events):
         while True:
             try:
@@ -71,6 +73,18 @@ if __name__ == "__main__":
                 print "[Main error]:", ex
                 return
             conn.setblocking(0)
+            handle_connection(sock, conn, addr, fd, events)
+            
+
+    def handle_connection(sock, conn, addr, fd, events, read_chunk_size=4096):
+        # TODO handle epoll event.
+        if not sock:
+            logging.error("No sock, fd: %s" % fd)
+            return
+
+        if events & select.EPOLLIN:
+            # read
+            pass
 
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -80,6 +94,5 @@ if __name__ == "__main__":
     s.listen(128)
     
     cb = functools.partial(callback, s)
-    io = IO.instance()
     io.add_handler(s.fileno(), cb, select.EPOLLIN)
     io.loop()
