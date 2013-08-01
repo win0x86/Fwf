@@ -16,9 +16,8 @@ import rawio
 
 
 class Stream(object):
-    def __init__(self, sock, io=None, max_buffer_size=104857600, read_chunk_size=4096, response_txt=""):
+    def __init__(self, sock, io=None, max_buffer_size=104857600, read_chunk_size=4096):
         self.sock = sock
-        self._response_txt = response_txt
         self._read_buffer = ""
         self._write_buffer = ""
         self.io = io or rawio.RawIO.instance()
@@ -91,7 +90,6 @@ class Stream(object):
             return
         self._read_buffer += data
         self._read_callback(self._read_buffer)
-        # self.io.modify_handler(self.sock.fileno(), select.EPOLLOUT)
 
 
     def read(self, delimiter, callback):
