@@ -60,8 +60,7 @@ class RawIO(object):
     def remove_handler(self, fd):
         try:
             if fd in self._handlers:
-                self._handlers[fd].shutdown(socket.SHUT_RDWR)
-                self._handlers.pop(fd, None)
+                self._handlers.pop(fd)
             self._epoll.unregister(fd)
         except (OSError, IOError):
             logging.error("Error removing fd from epoll", exc_info=True)
