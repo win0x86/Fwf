@@ -25,41 +25,47 @@ class Stream(object):
         self.read_chunk_size = read_chunk_size
         self._read_callback = None
         self._write_callback = None
-        self.io.add_handler(self.sock.fileno(), self._handle_events, select.EPOLLERR)
+        self._state = select.EPOLLERR
+        self.io.add_handler(self.sock.fileno(), self._handle_events, self._state)
+
+    def _add_io_state(self, state):
+        if not self._state & state:
+            self._state = self._state | state
+            self.io.modify_handler(self.sock.fileno(), self._state)
 
 
     def _handle_events(self, fd, event):
         if event & select.EPOLLIN:
             self._handle_read()
 
-        elif event & select.EPOLLOUT:
+        if event & select.EPOLLOUT:
             self._handle_write()
 
-        elif event & select.EPOLLHUP:
+        if event & select.EPOLLHUP:
             self.close()
-            self.remove_handler(fd)
+            return
 
-        #state = select.EPOLLERR
-        #if self._read_buffer:
-        #    self.io.modify_handler(self.sock.fileno(), select.EPOLLIN)
+        state = select.EPOLLERR
+        if self._read_buffer:
+            state = select.EPOLLIN
+        if self._write_buffer:
+            state |= select.EPOLLOUT
+        if state != self._state:
+            self._state = state
+            self._add_io_state(state)
 
 
     def write(self, data, callback=None):
         self._write_buffer += data
-        self.io.modify_handler(self.sock.fileno(), select.EPOLLOUT)
+        self._add_io_state(select.EPOLLOUT)
         self._write_callback = callback
 
 
     def _handle_write(self):
         while self._write_buffer:
             try:
-                # TODO 处理response写入和是否长连接, 关闭socket.
                 num_bytes = self.sock.send(self._write_buffer)
                 self._write_buffer = self._write_buffer[num_bytes:]
-
-                if not self._write_buffer and self._write_callback:
-                    pass
-                    # self.io.remove_handler(self.sock.fileno())
             except socket.error as ex:
                 if ex.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
                     break
@@ -67,14 +73,13 @@ class Stream(object):
                     logging.error("Write error on %d:%d" %
                                   self.sock.fileno(), ex)
                     return
-
-        if self._write_callback:
-           self._write_callback() 
+                
+        if not self._write_buffer and self._write_callback:
+            self._write_callback()
+            self._write_callback = None
 
 
     def _handle_read(self):
-        # TODO 1. 接收数据大小限制
-        # TODO 2. 处理HTTP请求生成response
         try:
             data = self.sock.recv(self.read_chunk_size)
         except socket.error as ex:
@@ -89,7 +94,15 @@ class Stream(object):
             self.close()
             return
         self._read_buffer += data
-        self._read_callback(self._read_buffer)
+        if len(self._read_buffer) > self.max_buffer_size:
+            logging.error("Reached maximum read buffer size")
+            self.close()
+            return
+
+        loc = self._read_buffer.find(self._read_delimiter)
+        if loc != -1:
+            self._read_callback(self._consume(loc + len(self._read_buffer)))
+            self._read_callback = None
 
 
     def read(self, delimiter, callback):
@@ -100,7 +113,7 @@ class Stream(object):
             return
         self._read_callback = callback
         self._read_delimiter = delimiter
-        self.io.modify_handler(self.sock.fileno(), select.EPOLLIN)
+        self._add_io_state(select.EPOLLIN)
 
 
     def _consume(self, loc):
@@ -114,58 +127,3 @@ class Stream(object):
             self.io.remove_handler(self.sock.fileno())
             self.sock.close()
             self.sock = None
-
-
-
-if __name__ == "__main__":
-    import functools
-    response = [b"HTTP/1.1 200 OK\r\n",
-                b"Date: Mon, 1 Jan 2013 01:01:01 GMT\r\n",
-                b"Content-Type: text/plain\r\n",
-                b"Content-Length: 13\r\n\r\n",
-                b"Hello, %s!"]
-    response = b"".join(response)
-
-    
-    def on_read(stream, data):
-        print "recv:", data
-        try:
-            name = None
-            lst = data.split()
-            name = lst[1][1:]
-        except:
-            pass
-
-        if not name: name = "Guest"
-        on_write_complete = functools.partial(stream.close)
-        stream.write(response % name, on_write_complete)
-
-
-    io = rawio.RawIO.instance()
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.setblocking(0)
-    s.bind(("", 8888))
-    s.listen(128)
-
-    
-    def handle_server(fd, events):
-        while True:
-            try:
-                conn, addr = s.accept()
-                conn.setblocking(0)
-            except socket.error as ex:
-                if ex.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
-                    return
-                raise
-
-            try:
-                stream = Stream(conn, response_txt=response)
-                _on_read = functools.partial(on_read, stream)
-                stream.read("\r\n\r\n", _on_read)
-            except:
-                logging.error("Error in connection.", exc_info=True)
-
-
-    io.add_handler(s.fileno(), handle_server, select.EPOLLIN)
-    io.loop()
