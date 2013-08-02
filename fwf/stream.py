@@ -35,34 +35,30 @@ class Stream(object):
 
 
     def _handle_events(self, fd, event):
+        print "fd:", fd, "event:", event
         if event & select.EPOLLIN:
             self._handle_read()
 
         if event & select.EPOLLOUT:
             self._handle_write()
 
-        if event & select.EPOLLHUP:
+        if event & select.EPOLLERR:
             self.close()
             return
 
         state = select.EPOLLERR
         if self._read_buffer:
-            state = select.EPOLLIN
+            state |= select.EPOLLIN
         if self._write_buffer:
             state |= select.EPOLLOUT
         if state != self._state:
             self._state = state
-            self._add_io_state(state)
-
-
-    def write(self, data, callback=None):
-        self._write_buffer += data
-        self._add_io_state(select.EPOLLOUT)
-        self._write_callback = callback
+            self.io.modify_handler(self.sock.fileno(), self._state)
 
 
     def _handle_write(self):
         while self._write_buffer:
+            print "write end"
             try:
                 num_bytes = self.sock.send(self._write_buffer)
                 self._write_buffer = self._write_buffer[num_bytes:]
@@ -77,6 +73,13 @@ class Stream(object):
         if not self._write_buffer and self._write_callback:
             self._write_callback()
             self._write_callback = None
+
+
+    def write(self, data, callback=None):
+        print "write start"
+        self._write_buffer += data
+        self._add_io_state(select.EPOLLOUT)
+        self._write_callback = callback
 
 
     def _handle_read(self):
@@ -100,13 +103,17 @@ class Stream(object):
             return
 
         loc = self._read_buffer.find(self._read_delimiter)
+        print "handlers:", self.io._handlers.keys()
         if loc != -1:
+            print "read end"
             self._read_callback(self._consume(loc + len(self._read_buffer)))
             self._read_callback = None
 
 
     def read(self, delimiter, callback):
         assert not self._read_callback, "Already reading."
+        print
+        print "read start"
         loc = self._read_buffer.find(delimiter)
         if loc != -1:
             callback(self._consume(loc + len(delimiter)))
@@ -114,6 +121,7 @@ class Stream(object):
         self._read_callback = callback
         self._read_delimiter = delimiter
         self._add_io_state(select.EPOLLIN)
+        print "set READ, state:", self._state
 
 
     def _consume(self, loc):
