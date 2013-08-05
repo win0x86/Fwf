@@ -4,18 +4,21 @@
 
 """
 
+import time
 import select
 import socket
 import errno
 import logging
+import urlparse
 
 import rawio
 import stream
 
 
 class HTTPServer(object):
-    def __init__(self, io=None):
+    def __init__(self, request_callback, io=None):
         self.io = io or rawio.RawIO.instance()
+        self.request_callback = request_callback
 
 
     def bind(self, port=8888, address="", listen=128):
@@ -38,32 +41,50 @@ class HTTPServer(object):
 
             try:
                 _stream = stream.Stream(conn, io=self.io)
-                HTTPConnection(_stream)
+                HTTPConnection(_stream, self.request_callback, remote_ip=addr[0])
             except:
                 logging.error("Error in connection.", exc_info=True)
 
 
 
 class HTTPConnection(object):
-    def __init__(self, _stream):
+    def __init__(self, _stream, request_callback, remote_ip, keep_alive=False):
         self.stream = _stream
+        self.request_callback = request_callback
         self._keep_alive = False
+        self._remote_ip = remote_ip
+        self._keep_alive = keep_alive
+        self._request = None
         self.stream.read("\r\n\r\n", self._on_headers)
         
 
     def _on_headers(self, data):
-        # TODO Remove this.
-        response = [b"HTTP/1.1 200 OK\r\n",
-                    b"Date: Mon, 1 Jan 2013 01:01:01 GMT\r\n",
-                    b"Content-Type: text/plain\r\n",
-                    b"Content-Length: 13\r\n\r\n",
-                    b"Hello, %s!"]
-        response = b"".join(response)
         request_line = data[:data.find("\r\n")]
+        method, url, http_version = request_line.split()
+        if not http_version.startswith("HTTP/"):
+            raise Exception("No HTTP protocol.")
         headers = HTTPHeaders.parse(data[data.find("\r\n"):])
         self._keep_alive = headers.get("Connection") == "keep-alive"
+        self._request = HTTPRequest(self.stream,
+                                    url=url,
+                                    headers=headers,
+                                    http_version=http_version,
+                                    remote_ip=self._remote_ip,
+                                    connection=self)
 
-        self.stream.write(response % "Guest", self._on_finish)
+        content_length = headers.get("Content-Length")
+        if content_length:
+            content_length = int(content_length)
+            if content_length > self.stream.max_buffer_size:
+                raise Exception("Content-Length too long.")
+            self.stream.read(content_length, self._on_request_body)
+
+        self.request_callback(self._request)
+
+
+    def _on_request_body(self, data):
+        self._request.body = data
+
 
 
     def _on_finish(self):
@@ -91,10 +112,33 @@ class HTTPHeaders(dict):
 
     def add(self, name, value):
         self[name] = value
-        
 
 
-if __name__ == "__main__":
-    server = HTTPServer()
-    server.bind()
-    rawio.RawIO.instance().loop()
+
+class HTTPRequest(object):
+    def __init__(self, method, url, headers, http_version, remote_ip, protocol=None, files=None, connection=None):
+        self.method = method
+        self.url = url
+        self.http_version = http_version
+        self.remote_ip = remote_ip
+        self.protocol = protocol or "http"
+        self.headers = headers or HTTPHeaders()
+        self.host = self.headers.get("Host") or "127.0.0.1"
+        self.files = files or {}
+        self.connection = connection
+
+        scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
+        self.path = path
+        self.query =query
+        self.params = {}
+        self._start_time = time.time()
+
+
+    def request_time(self):
+        return time.time() - self._start_time
+
+
+
+class HTTPResponse(object):
+    def __init__(self, url, ):
+        pass
