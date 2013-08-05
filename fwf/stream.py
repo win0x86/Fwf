@@ -18,11 +18,13 @@ import rawio
 class Stream(object):
     def __init__(self, sock, io=None, max_buffer_size=104857600, read_chunk_size=4096):
         self.sock = sock
-        self._read_buffer = ""
-        self._write_buffer = ""
+        self.sock.setblocking(False)
         self.io = io or rawio.RawIO.instance()
         self.max_buffer_size = max_buffer_size
         self.read_chunk_size = read_chunk_size
+        self._read_buffer = ""
+        self._write_buffer = ""
+        self._read_delimiter = None
         self._read_callback = None
         self._write_callback = None
         self._state = select.EPOLLERR
@@ -35,7 +37,6 @@ class Stream(object):
 
 
     def _handle_events(self, fd, event):
-        print "fd:", fd, "event:", event
         if event & select.EPOLLIN:
             self._handle_read()
 
@@ -46,8 +47,10 @@ class Stream(object):
             self.close()
             return
 
+        if not self.sock: return
+        
         state = select.EPOLLERR
-        if self._read_buffer:
+        if self._read_delimiter:
             state |= select.EPOLLIN
         if self._write_buffer:
             state |= select.EPOLLOUT
@@ -58,7 +61,6 @@ class Stream(object):
 
     def _handle_write(self):
         while self._write_buffer:
-            print "write end"
             try:
                 num_bytes = self.sock.send(self._write_buffer)
                 self._write_buffer = self._write_buffer[num_bytes:]
@@ -76,7 +78,6 @@ class Stream(object):
 
 
     def write(self, data, callback=None):
-        print "write start"
         self._write_buffer += data
         self._add_io_state(select.EPOLLOUT)
         self._write_callback = callback
@@ -103,17 +104,14 @@ class Stream(object):
             return
 
         loc = self._read_buffer.find(self._read_delimiter)
-        print "handlers:", self.io._handlers.keys()
         if loc != -1:
-            print "read end"
-            self._read_callback(self._consume(loc + len(self._read_buffer)))
+            delimiter_len = len(self._read_delimiter)
+            self._read_callback(self._consume(loc + delimiter_len))
             self._read_callback = None
-
+            
 
     def read(self, delimiter, callback):
         assert not self._read_callback, "Already reading."
-        print
-        print "read start"
         loc = self._read_buffer.find(delimiter)
         if loc != -1:
             callback(self._consume(loc + len(delimiter)))
@@ -121,7 +119,6 @@ class Stream(object):
         self._read_callback = callback
         self._read_delimiter = delimiter
         self._add_io_state(select.EPOLLIN)
-        print "set READ, state:", self._state
 
 
     def _consume(self, loc):

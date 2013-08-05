@@ -31,7 +31,6 @@ class HTTPServer(object):
         while True:
             try:
                 conn, addr = self._socket.accept()
-                conn.setblocking(0)
             except socket.error as ex:
                 if ex.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
                     return
@@ -63,7 +62,7 @@ class HTTPConnection(object):
         request_line = data[:data.find("\r\n")]
         headers = HTTPHeaders.parse(data[data.find("\r\n"):])
         self._keep_alive = headers.get("Connection") == "keep-alive"
-        
+
         self.stream.write(response % "Guest", self._on_finish)
 
 
