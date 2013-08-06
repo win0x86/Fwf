@@ -12,14 +12,14 @@ import select
 import errno
 import logging
 
-import rawio
+import fwf.rawio
 
 
 class Stream(object):
     def __init__(self, sock, io=None, max_buffer_size=104857600, read_chunk_size=4096):
         self.sock = sock
         self.sock.setblocking(False)
-        self.io = io or rawio.RawIO.instance()
+        self.io = io or fwf.rawio.RawIO.instance()
         self.max_buffer_size = max_buffer_size
         self.read_chunk_size = read_chunk_size
         self._read_buffer = ""

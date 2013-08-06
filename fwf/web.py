@@ -7,6 +7,10 @@ Context: 所的请求处理类上下文.
 
 """
 
+import time
+import logging
+import datetime
+
 import rawio
 import server
 
@@ -14,42 +18,37 @@ import server
 class RequestHandler(object):
     """Base web request handler.
 
-    
     """
-
     def __init__(self, request):
         self.request = request
 
 
-    def __call__(self, *args, **kwargs):
-        # TEST
-        self.finish()
+    def get(self, *args, **kwargs):
+        raise NotImplementedError()
 
 
-    def finish(self):
-        response = [b"HTTP/1.1 200 OK\r\n",
-                    b"Date: Mon, 1 Jan 2013 01:01:01 GMT\r\n",
-                    b"Content-Type: text/plain\r\n",
-                    b"Content-Length: 13\r\n\r\n",
-                    b"Hello, %s!"]
-        response = b"".join(response)
-        self.request.connection.stream.write(response % "Guest",
+    def finish(self, data):
+        logging.info("[%s] %s %s" %
+                     (datetime.datetime.now(),
+                      self.request.url, self.request_time()))
+        self.request.connection.stream.write(data,
                                              self.request.connection._on_finish)
+
+
+    def request_time(self):
+        return ("%.4f ms" % (self.request.request_time() * 1000.0))
 
 
 
 class Context(object):
-    def __init__(self):
-        pass
+    def __init__(self, handlers):
+        self._handlers = handlers
 
 
     def __call__(self, request):
-        response = RequestHandler(request)
-        response()
-
-
-
-if __name__ == "__main__":
-    s = server.HTTPServer(Context())
-    s.bind()
-    rawio.RawIO.instance().loop()
+        response = self._handlers.get(request.url)
+        if response:
+            handle = response(request)
+            getattr(handle, request.method.lower())()
+        else:
+            raise Exception("Not found.")

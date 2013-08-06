@@ -11,13 +11,13 @@ import errno
 import logging
 import urlparse
 
-import rawio
-import stream
+import fwf.rawio
+import fwf.stream
 
 
 class HTTPServer(object):
     def __init__(self, request_callback, io=None):
-        self.io = io or rawio.RawIO.instance()
+        self.io = io or fwf.rawio.RawIO.instance()
         self.request_callback = request_callback
 
 
@@ -40,16 +40,16 @@ class HTTPServer(object):
                 raise
 
             try:
-                _stream = stream.Stream(conn, io=self.io)
-                HTTPConnection(_stream, self.request_callback, remote_ip=addr[0])
+                stream = fwf.stream.Stream(conn, io=self.io)
+                HTTPConnection(stream, self.request_callback, remote_ip=addr[0])
             except:
                 logging.error("Error in connection.", exc_info=True)
 
 
 
 class HTTPConnection(object):
-    def __init__(self, _stream, request_callback, remote_ip, keep_alive=False):
-        self.stream = _stream
+    def __init__(self, stream, request_callback, remote_ip, keep_alive=False):
+        self.stream = stream
         self.request_callback = request_callback
         self._keep_alive = False
         self._remote_ip = remote_ip
@@ -62,10 +62,11 @@ class HTTPConnection(object):
         request_line = data[:data.find("\r\n")]
         method, url, http_version = request_line.split()
         if not http_version.startswith("HTTP/"):
-            raise Exception("No HTTP protocol.")
+            raise Exception("Not HTTP protocol.")
         headers = HTTPHeaders.parse(data[data.find("\r\n"):])
         self._keep_alive = headers.get("Connection") == "keep-alive"
         self._request = HTTPRequest(self.stream,
+                                    method,
                                     url=url,
                                     headers=headers,
                                     http_version=http_version,
@@ -84,7 +85,6 @@ class HTTPConnection(object):
 
     def _on_request_body(self, data):
         self._request.body = data
-
 
 
     def _on_finish(self):
@@ -116,7 +116,8 @@ class HTTPHeaders(dict):
 
 
 class HTTPRequest(object):
-    def __init__(self, method, url, headers, http_version, remote_ip, protocol=None, files=None, connection=None):
+    def __init__(self, stream, method, url, headers, http_version, remote_ip, protocol=None, files=None, connection=None):
+        self.stream = stream
         self.method = method
         self.url = url
         self.http_version = http_version
@@ -140,5 +141,5 @@ class HTTPRequest(object):
 
 
 class HTTPResponse(object):
-    def __init__(self, url, ):
+    def __init__(self, url):
         pass
