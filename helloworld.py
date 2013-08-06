@@ -5,6 +5,7 @@
 
 """
 
+import time
 import logging
 
 import fwf.rawio
@@ -15,21 +16,27 @@ import fwf.server
 class HelloWorldHandler(fwf.web.RequestHandler):
     def get(self):
         s = b"Hello world."
-        response = [b"HTTP/1.1 200 OK\r\n",
-                    b"Date: Mon, 1 Jan 2013 01:01:01 GMT\r\n",
-                    b"Content-Type: text/plain\r\n",
-                    b"Content-Length: %d\r\n\r\n" % len(s),
-                    s]
-        response = b"".join(response)
 
-        self.finish(response)
+        self.finish(s)
+
+
+
+class TestErrorHandler(fwf.web.RequestHandler):
+    def get(self):
+        s = "Test error handler."
+        raise Exception(s)
+        self.finish(s)
 
 
 
 def main():
     logging.getLogger().setLevel(logging.INFO)
 
-    handlers = {"/": HelloWorldHandler}
+    handlers = {
+        "/": HelloWorldHandler,
+        "/500": TestErrorHandler,
+        }
+
     context = fwf.web.Context(handlers)
     s = fwf.server.HTTPServer(context)
     s.bind()
