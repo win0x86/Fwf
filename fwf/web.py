@@ -67,6 +67,16 @@ class RequestHandler(object):
 
 
 
+class AsyncRequestHandler(object):
+    """Asynchronous Request Handler.
+
+    Use yield to implement coroutine.
+    
+    """
+    pass
+
+
+
 class Context(object):
     def __init__(self, handlers):
         self._handlers = handlers
