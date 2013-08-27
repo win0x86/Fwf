@@ -7,6 +7,7 @@ Context: 所的请求处理类上下文.
 
 """
 
+import re
 import time
 import logging
 import datetime
@@ -15,8 +16,7 @@ import httplib
 import rawio
 import server
 
-
-gen_date = lambda: time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+from fwf.util import gen_header_date
 
 
 class RequestHandler(object):
@@ -26,11 +26,17 @@ class RequestHandler(object):
     def __init__(self, request):
         self.request = request
         self._headers = {}
-        self.set_back(200)
+        self._write = ""
+        self._status_code = 200
+        self.set_status(self._status_code)
 
 
     def get(self, *args, **kwargs):
-        raise NotImplementedError()
+        raise HTTPError()
+
+    
+    def post(self, *args, **kwargs):
+        raise HTTPError()
 
 
     def finish(self, data):
@@ -40,9 +46,11 @@ class RequestHandler(object):
         response.append("")
         response.append(data)
 
-        logging.info("[%s] %s %s" %
-                     (datetime.datetime.now(),
-                      self.request.url, self.request_time()))
+        logging.info("[%s] %d %s %s" %(
+                datetime.datetime.now(),
+                self._status_code,
+                self.request.url,
+                self.request_time()))
 
         self.request.connection.stream.write("\r\n".join(response),
                                              self.request.connection._on_finish)
@@ -55,22 +63,22 @@ class RequestHandler(object):
     def _generate_headers(self):
         self._headers["Server"] = b"Fwf web server"
         self._headers["Content-Type"] = b"text/plain"
-        self._headers["Date"] = gen_date()
+        self._headers["Date"] = gen_header_date()
 
 
-    def set_back(self, state_code):
+    def set_status(self, status_code):
+        assert status_code in httplib.responses, "Response code not in responses."
         self._generate_headers()
-        assert state_code in httplib.responses, "Response code not in responses."
-        self._response_line = b"%s %d %s" % (self.request.http_version,
-                                            state_code,
-                                            httplib.responses[state_code])
+        self._status_code = status_code
+        self._response_line = b"%s %d %s" % (
+            self.request.http_version,
+            status_code,
+            httplib.responses[status_code])
 
 
 
 class AsyncRequestHandler(object):
     """Asynchronous Request Handler.
-
-    Use yield to implement coroutine.
     
     """
     pass
@@ -78,32 +86,74 @@ class AsyncRequestHandler(object):
 
 
 class Context(object):
-    def __init__(self, handlers):
-        self._handlers = handlers
+    def __init__(self, handlers, **settings):
+        assert isinstance(handlers, dict), "Handlers must be dict."
+        self.settings = settings
+        self.handlers = self._handle_url(handlers)
+
+
+
+    def _handle_url(self, handlers):
+        _handlers = {}
+        
+        for pattern, handle in handlers.iteritems():
+            if pattern[-1] != "$":
+                pattern += "$"
+            _handlers[re.compile(pattern)] = handle
+            
+        return _handlers
 
 
     def __call__(self, request):
         try:
-            response = self._handlers.get(request.url)
-            if response:
-                handle = response(request)
-                getattr(handle, request.method.lower())()
+            args = []
+            kwargs = {}
+            handler = self._match_handler(request)
+            if handler:
+                h = handler(request)
+                getattr(h, request.method.lower())(*args, **kwargs)
             else:
                 NotFoundHandler(request).get()
+        except HTTPError as ex:
+            ErrorHandler(request).get(405)
         except Exception as ex:
-            logging.error("Internal server error.", exc_info=True)
-            ErrorHandler(request).get()
+            logging.error("Internal server error.", exc_info=ex)
+            ErrorHandler(request).get(500)
+
+
+    def _match_handler(self, request):
+        host = request.host.lower().split(":")[0]
+        for pattern in self.handlers:
+            if pattern.match(request.url):
+                return self.handlers[pattern]
 
 
 
 class NotFoundHandler(RequestHandler):
     def get(self):
-        self.set_back(404)
-        self.finish(httplib.responses[404])
+        self.set_status(404)
+        raise HTTPError(404, httplib.responses[404])
 
 
 
 class ErrorHandler(RequestHandler):
-    def get(self):
-        self.set_back(500)
-        self.finish(httplib.responses[500])
+    def get(self, status_code):
+        self.set_status(status_code)
+        self.finish(httplib.responses[status_code])
+
+
+
+class HTTPError(Exception):
+    def __init__(self, status_code, log_message=None):
+        self.status_code = status_code
+        self.log_message = log_message
+
+
+    def __str__(self):
+        message = "HTTP %d: %s" % (
+            self.status_code,
+            httplib.responses[self.status_code])
+        if self.log_message:
+            message += " ( %s )" % self.log_message
+
+        return message

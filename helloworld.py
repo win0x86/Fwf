@@ -16,7 +16,6 @@ import fwf.server
 class HelloWorldHandler(fwf.web.RequestHandler):
     def get(self):
         s = b"Hello world."
-
         self.finish(s)
 
 
