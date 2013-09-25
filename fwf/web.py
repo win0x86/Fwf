@@ -32,11 +32,11 @@ class RequestHandler(object):
 
 
     def get(self, *args, **kwargs):
-        raise HTTPError()
+        raise HTTPError(405)
 
     
     def post(self, *args, **kwargs):
-        raise HTTPError()
+        raise HTTPError(405)
 
 
     def finish(self, data):
@@ -77,20 +77,11 @@ class RequestHandler(object):
 
 
 
-class AsyncRequestHandler(object):
-    """Asynchronous Request Handler.
-    
-    """
-    pass
-
-
-
 class Context(object):
     def __init__(self, handlers, **settings):
         assert isinstance(handlers, dict), "Handlers must be dict."
         self.settings = settings
         self.handlers = self._handle_url(handlers)
-
 
 
     def _handle_url(self, handlers):
@@ -100,7 +91,7 @@ class Context(object):
             if pattern[-1] != "$":
                 pattern += "$"
             _handlers[re.compile(pattern)] = handle
-            
+
         return _handlers
 
 
@@ -115,10 +106,11 @@ class Context(object):
             else:
                 NotFoundHandler(request).get()
         except HTTPError as ex:
-            ErrorHandler(request).get(405)
+            ErrorHandler(request).get(ex.status_code, ex.log_message or
+                                      httplib.responses[status_code])
         except Exception as ex:
             logging.error("Internal server error.", exc_info=ex)
-            ErrorHandler(request).get(500)
+            ErrorHandler(request).get(500, httplib.responses[500])
 
 
     def _match_handler(self, request):
@@ -137,9 +129,9 @@ class NotFoundHandler(RequestHandler):
 
 
 class ErrorHandler(RequestHandler):
-    def get(self, status_code):
+    def get(self, status_code, msg):
         self.set_status(status_code)
-        self.finish(httplib.responses[status_code])
+        self.finish(msg)
 
 
 

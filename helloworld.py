@@ -27,12 +27,19 @@ class TestErrorHandler(fwf.web.RequestHandler):
         self.finish(s)
 
 
+        
+class Test403Handler(fwf.web.RequestHandler):
+    def get(self):
+        raise fwf.web.HTTPError(403, "Not allow.")
 
+
+    
 def main():
     logging.getLogger().setLevel(logging.INFO)
 
     handlers = {
         "/": HelloWorldHandler,
+        "/403": Test403Handler,
         "/500": TestErrorHandler,
         }
 
