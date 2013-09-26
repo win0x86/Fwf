@@ -5,6 +5,12 @@
 RequestHandler: 请求处理基类.
 Context: 所的请求处理类上下文.
 
+TODO:
+
+1. 模板渲染.
+2. 缓存(HTTP 头).
+3. gzip等功能实现.
+
 """
 
 import re
@@ -12,7 +18,7 @@ import time
 import logging
 import datetime
 import httplib
-
+from traceback import format_exc
 import rawio
 import server
 
@@ -67,7 +73,7 @@ class RequestHandler(object):
 
 
     def set_status(self, status_code):
-        assert status_code in httplib.responses, "Response code not in responses."
+        assert status_code in httplib.responses, "Response code is not in httplib.responses."
         self._generate_headers()
         self._status_code = status_code
         self._response_line = b"%s %d %s" % (
@@ -107,10 +113,13 @@ class Context(object):
                 NotFoundHandler(request).get()
         except HTTPError as ex:
             ErrorHandler(request).get(ex.status_code, ex.log_message or
-                                      httplib.responses[status_code])
+                                      httplib.responses[ex.status_code])
         except Exception as ex:
             logging.error("Internal server error.", exc_info=ex)
-            ErrorHandler(request).get(500, httplib.responses[500])
+            ErrorHandler(request).get(
+                500, "{0} \n {1}".format(
+                    httplib.responses[500],
+                    self.settings.get("debug") and format_exc(ex) or ""))
 
 
     def _match_handler(self, request):
@@ -123,7 +132,6 @@ class Context(object):
 
 class NotFoundHandler(RequestHandler):
     def get(self):
-        self.set_status(404)
         raise HTTPError(404, httplib.responses[404])
 
 

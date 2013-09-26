@@ -43,7 +43,7 @@ def main():
         "/500": TestErrorHandler,
         }
 
-    context = fwf.web.Context(handlers)
+    context = fwf.web.Context(handlers, debug=True)
     s = fwf.server.HTTPServer(context)
     s.bind()
     fwf.rawio.RawIO.instance().loop()
