@@ -37,20 +37,24 @@ class RequestHandler(object):
         self.set_status(self._status_code)
 
 
+    def head(self, *args, **kwargs):
+        raise HTTPError(405)
+
+
     def get(self, *args, **kwargs):
         raise HTTPError(405)
 
-    
+
     def post(self, *args, **kwargs):
         raise HTTPError(405)
 
 
-    def finish(self, data):
+    def finish(self, content):
         response = [b"%s" % self._response_line]
         response.extend([b"%s: %s" % (k, v) for k, v in  self._headers.iteritems()])
-        response.append("Content-Length: %d" % len(data))
+        response.append("Content-Length: %d" % len(content))
         response.append("")
-        response.append(data)
+        response.append(content)
 
         logging.info("[%s] %d %s %s" %(
                 datetime.datetime.now(),
@@ -80,6 +84,14 @@ class RequestHandler(object):
             self.request.http_version,
             status_code,
             httplib.responses[status_code])
+
+
+    def write(self, content):
+        self.finish(content)
+
+
+    def view(self, template_name, **kwargs):
+        pass
 
 
 

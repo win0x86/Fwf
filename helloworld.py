@@ -27,14 +27,15 @@ class TestErrorHandler(fwf.web.RequestHandler):
         self.finish(s)
 
 
-        
+
 class Test403Handler(fwf.web.RequestHandler):
     def get(self):
         raise fwf.web.HTTPError(403, "Not allow.")
 
 
-    
+
 def main():
+    port = 8888
     logging.getLogger().setLevel(logging.INFO)
 
     handlers = {
@@ -45,7 +46,8 @@ def main():
 
     context = fwf.web.Context(handlers, debug=True)
     s = fwf.server.HTTPServer(context)
-    s.bind()
+    s.bind(port=port)
+    print "Listen on %d ..." % port
     fwf.rawio.RawIO.instance().loop()
 
 
