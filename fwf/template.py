@@ -26,8 +26,13 @@ class Template(object):
         self.body = body
 
 
+    def generate(self, **kwargs):
+        pass
+
+
 
 class TemplateLoader(object):
+    """ 加载模板文件 """
     def __init__(self, name, path="."):
         self.name = name
         self.path = path
@@ -46,6 +51,7 @@ class TemplateLoader(object):
 
 
 class _TemplateReader(object):
+    """ 处理模板读取的内容 """
     def __init__(self, name, body):
         assert name
         self.name = name
@@ -55,7 +61,7 @@ class _TemplateReader(object):
         self.line = 0
 
 
-    def find(self, sep, start):
+    def find(self, sep, start=0):
         index = self.body.index(sep, start + self.pos)
         self.pos = index
         return index
@@ -69,9 +75,9 @@ class _TemplateReader(object):
         if isinstance(pos, slice):
             return self.body[pos]
         elif pos > 0:
-            return self.body[self.pos + pos]
+            return self.body[self.pos + pos:]
         else:
-            return self.body[pos]
+            return self.body[pos:]
 
 
     def _str__(self):
@@ -79,67 +85,111 @@ class _TemplateReader(object):
 
 
 
-
 class Norm(object):
+    def __init__(self, body):
+        self.body = body
+
+
     def write(self):
         raise NotImplementedError()
 
 
 
 class _Text(Norm):
-    def write(self):
+    """ 文本 """
+    def write(self, stream):
         pass
 
 
 
 class _Expression(Norm):
-    def write(self):
+    """ Python 表达式"""
+    def write(self, stream):
         pass
 
 
 
+class _Code(Norm):
+    """Python var"""
+    def write(self, stream):
+        stream.write("%s" % self.body)
+
+
+
+class Assembly(object):
+    """生成python code"""
+    def __init__(self):
+        self.stream = cStringIO.StringIO()
+
+
+    def run(self, things):
+        self.stream.write("def __assembly_template():")
+        
+        for t in things:
+            t.write(self.stream)
+
+
+
 class _TemplateParse(object):
+    """转换 text -> python code"""
     def __init__(self, reader):
         self.reader = reader
 
 
     def parse(self):
         body = []
-
         while True:
-            curr = 0
-
-            for i in xrange(self.reader.length):
-                pos = self.reader.find("{", curr)
-                if pos < 0:
-                    body.append(self.reader[pos:])
+            curly = 0
+            while True:
+                index = self.reader.find("{{")
+                if index < 0:
+                    body.append(_Text(self.reader[:]))
                     return body
 
-                if self.reader[pos + 1] == "{":
-                    curr += 1
+                if self.reader[index + 1] == "{":
+                    curly += 1
                     continue
 
-                if self.reader[pos + 1] not in ("%", "{"):
-                    curr += 1
+                if self.reader[index + 1] not in ("%", "{"):
+                    curly += 1
                     continue
-
                 break
 
-            end = self.reader.find("}}")
-            if end < 0: raise TemplateException("Miss }}.")
-            express = self.reader[:end].strip()
-            head, sep, tail = express.partition(" ")
-            if tail.strip() == "}}":
-                body.append(head)
+            # 处理 变量, 方法
+            part = self.reader[curly +  2:].strip()
+            head, spacing, tail = part.partition(" ").strip()
 
 
 
-def test_template():
+def test_template_loader():
     load = TemplateLoader("index.html", "/home/cc/work/test/web/templates")
     html = load.read()
     assert html
     print html
 
 
+
+def test_template_reader():
+    pass
+
+
+
+def test_template_parse():
+    # reader = _TemplateReader("index.html", TemplateLoader("index.html", "/home/cc/work/test/web/templates").read())
+    html = """
+<html DOCTYPE>
+<head><title></title></head>
+<body>
+<h1> {{ name }}</h1>
+</body>
+</html>
+"""
+    reader = _TemplateReader("index.html", html)
+    parse = _TemplateParse(reader)
+    print parse.parse()
+
+
+
 if __name__ == "__main__":
-    test_template()
+    # test_template_loader()
+    test_template_parse()

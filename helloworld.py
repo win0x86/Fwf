@@ -47,7 +47,7 @@ def main():
     context = fwf.web.Context(handlers, debug=True)
     s = fwf.server.HTTPServer(context)
     s.bind(port=port)
-    print "Listen on %d ..." % port
+    logging.info("Listen on %d ..." % port)
     fwf.rawio.RawIO.instance().loop()
 
 
