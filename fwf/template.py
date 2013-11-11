@@ -6,9 +6,8 @@
 TODO:
 
 1. 处理if for try 等语句.
-2. 区分代码与表达式.
-3. 拼接执行代码.
-4. 把代码动态嵌入到执行环境.
+2. 拼接执行代码.
+3. 把代码动态嵌入到执行环境.
 
 """
 
@@ -50,146 +49,124 @@ class TemplateLoader(object):
 
 
 
-class _TemplateReader(object):
-    """ 处理模板读取的内容 """
-    def __init__(self, name, body):
-        assert name
-        self.name = name
-        self.body = body
-        self.length = len(body)
-        self.pos = 0
-        self.line = 0
+class _Assemble(object):
+    def __init__(self, items):
+        self._items = items
 
 
-    def find(self, sep, start=0):
-        index = self.body.index(sep, start + self.pos)
-        self.pos = index
-        return index
-
-
-    def is_ending(self):
-        return self.pos >= self.length
-
-
-    def __getitem__(self, pos):
-        if isinstance(pos, slice):
-            return self.body[pos]
-        elif pos > 0:
-            return self.body[self.pos + pos:]
-        else:
-            return self.body[pos:]
-
-
-    def _str__(self):
-        return self.body[self.pos:]
+    def gen(self):
+        for item in self._items:
+            pass
 
 
 
-class Norm(object):
-    def __init__(self, body):
-        self.body = body
+class Item(object):
+    def __init__(self, text):
+        self._text = text
 
 
-    def write(self):
+    @property
+    def text(self):
+        return self._text
+
+
+    def mix(self):
         raise NotImplementedError()
 
 
 
-class _Text(Norm):
-    """ 文本 """
-    def write(self, stream):
+class _Text(Item):
+    def mix(self):
         pass
 
 
 
-class _Expression(Norm):
-    """ Python 表达式"""
-    def write(self, stream):
+class _Expression(Item):
+    def mix(self):
         pass
 
 
 
-class _Code(Norm):
-    """Python var"""
-    def write(self, stream):
-        stream.write("%s" % self.body)
+class TemplateParse(object):
+    def __init__(self, html):
+        self._html = html
+        self._len = len(html)
+        self._curr = 0
+        self._items = []
 
 
-
-class Assembly(object):
-    """生成python code"""
-    def __init__(self):
-        self.stream = cStringIO.StringIO()
-
-
-    def run(self, things):
-        self.stream.write("def __assembly_template():")
-        
-        for t in things:
-            t.write(self.stream)
-
-
-
-class _TemplateParse(object):
-    """转换 text -> python code"""
-    def __init__(self, reader):
-        self.reader = reader
-
-
-    def parse(self):
-        body = []
+    def __call__(self):
         while True:
-            curly = 0
+            loc = 0
             while True:
-                index = self.reader.find("{{")
-                if index < 0:
-                    body.append(_Text(self.reader[:]))
-                    return body
+                loc = self.find("{", loc)
+                if loc == -1:
+                    self._items.append(_Text(self.cut()))
+                    return
 
-                if self.reader[index + 1] == "{":
-                    curly += 1
+                if self[loc + 1] != "{":
+                    loc += 1
                     continue
 
-                if self.reader[index + 1] not in ("%", "{"):
-                    curly += 1
+                if self[loc + 1] == "{" and self[loc + 2] == "{":
+                    loc += 1
                     continue
                 break
 
-            # 处理 变量, 方法
-            part = self.reader[curly +  2:].strip()
-            head, spacing, tail = part.partition(" ").strip()
+            if loc > -1:
+                self._items.append(_Text(self.cut(loc)))
+            exp_start = self.cut(2) # "{{"
+            end = self.find("}}")
+            content = self.cut(end).strip()
+            self._items.append(_Expression(content))
+            self.cut(2) # "}}"
+            continue
+
+
+    def cut(self, count=None):
+        if count is None:
+            count = self._len - self._curr
+
+        pos = self._curr + count
+        s = self._html[self._curr: pos]
+        self._curr += count
+        return s
+
+
+    def find(self, delim, start=0):
+        index = self._html.find(delim, start + self._curr)
+        if index != -1:
+            index -= self._curr
+        return index
+
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            start, step, stop = key.indices(self._len - self._curr)
+            return self._html[start + self._curr: step: stop]
+        else:
+            return self._html[self._curr + key]
 
 
 
-def test_template_loader():
-    load = TemplateLoader("index.html", "/home/cc/work/test/web/templates")
-    html = load.read()
-    assert html
-    print html
-
-
-
-def test_template_reader():
-    pass
-
-
-
-def test_template_parse():
-    # reader = _TemplateReader("index.html", TemplateLoader("index.html", "/home/cc/work/test/web/templates").read())
-    html = """
-<html DOCTYPE>
-<head><title></title></head>
+def test_template():
+    html = """<!DOCTYPE html><html>
+<head><title>Hello</title></head>
 <body>
-<h1> {{ name }}</h1>
+<h1>Name: {{{{ name }}}}</h1>
+<h2>Company: {{ company }}}</h2>
+<h3>Address: {{ address }}}}</h3>
+<h4>Phone: {{ phone }}</h4>
 </body>
-</html>
-"""
-    reader = _TemplateReader("index.html", html)
-    parse = _TemplateParse(reader)
-    print parse.parse()
+</html>"""
+
+    template = TemplateParse(html)
+    template()
+    for t  in template._items:
+        print t.text,
+    print "\n%s" % template._items
 
 
 
 if __name__ == "__main__":
-    # test_template_loader()
-    test_template_parse()
+    test_template()
