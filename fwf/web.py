@@ -7,9 +7,8 @@ Context: 所的请求处理类上下文.
 
 TODO:
 
-1. 模板渲染.
-2. 缓存(HTTP 头).
-3. gzip等功能实现.
+1. 缓存(HTTP 头).
+2. gzip等功能实现.
 
 """
 
@@ -23,6 +22,7 @@ import rawio
 import server
 
 from fwf.util import gen_header_date
+from fwf.template import Template, TemplateLoader
 
 
 class RequestHandler(object):
@@ -91,7 +91,9 @@ class RequestHandler(object):
 
 
     def view(self, template_name, **kwargs):
-        pass
+        loader = TemplateLoader(template_name)
+        html = Template(template_name, loader.read()).generate(**kwargs)
+        return html
 
 
 
