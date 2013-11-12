@@ -3,11 +3,13 @@
 """模板解析
 
 
-TODO:
+[code]
 
-1. 处理if for try 等语句.
-2. 拼接执行代码.
-3. 把代码动态嵌入到执行环境.
+name = "index.html"
+template = Template(name, TemplateLoader("name").read()).generate(name="jack", op="add")
+
+[/code]
+
 
 """
 
