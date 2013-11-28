@@ -33,6 +33,7 @@ class Template(object):
         _parse = TemplateParse(_TemplateReader(self.body))
         _Assemble(_parse()).gen(self.writer)
 
+
     def generate(self, **kwargs):
         namespace = {}
         namespace.update(kwargs)

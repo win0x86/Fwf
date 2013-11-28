@@ -29,12 +29,14 @@ class RequestHandler(object):
     """Base web request handler.
 
     """
-    def __init__(self, request):
+    def __init__(self, context, request):
+        self.context = context
         self.request = request
         self._headers = {}
         self._write = ""
         self._status_code = 200
         self.set_status(self._status_code)
+        self.clean_headers()
 
 
     def head(self, *args, **kwargs):
@@ -62,23 +64,28 @@ class RequestHandler(object):
                 self.request.url,
                 self.request_time()))
 
-        self.request.connection.stream.write("\r\n".join(response),
-                                             self.request.connection._on_finish)
+        self.request.connection.stream.write(
+            "\r\n".join(response),
+            self.request.connection._on_finish)
 
 
     def request_time(self):
         return ("%.4f ms" % (self.request.request_time() * 1000.0))
 
 
-    def _generate_headers(self):
+    def set_header(self, name, value):
+        self._headers[name] = value
+
+
+    def clean_headers(self):
+        self._headers = {}
         self._headers["Server"] = b"Fwf web server"
         self._headers["Content-Type"] = b"text/plain"
-        self._headers["Date"] = gen_header_date()
+        self._headers["Date"] = gen_header_date()        
 
 
     def set_status(self, status_code):
         assert status_code in httplib.responses, "Response code is not in httplib.responses."
-        self._generate_headers()
         self._status_code = status_code
         self._response_line = b"%s %d %s" % (
             self.request.http_version,
@@ -91,9 +98,10 @@ class RequestHandler(object):
 
 
     def view(self, template_name, **kwargs):
-        loader = TemplateLoader(template_name)
+        loader = TemplateLoader(template_name, self.context._template_path)
         html = Template(template_name, loader.read()).generate(**kwargs)
-        return html
+        self.set_header("Content-Type", "text/html")
+        self.finish(html)
 
 
 
@@ -101,6 +109,7 @@ class Context(object):
     def __init__(self, handlers, **settings):
         assert isinstance(handlers, dict), "Handlers must be dict."
         self.settings = settings
+        self._template_path = settings.get("template_path", ".")
         self.handlers = self._handle_url(handlers)
 
 
@@ -121,16 +130,16 @@ class Context(object):
             kwargs = {}
             handler = self._match_handler(request)
             if handler:
-                h = handler(request)
+                h = handler(self, request)
                 getattr(h, request.method.lower())(*args, **kwargs)
             else:
-                NotFoundHandler(request).get()
+                NotFoundHandler(self, request).get()
         except HTTPError as ex:
-            ErrorHandler(request).get(ex.status_code, ex.log_message or
+            ErrorHandler(self, request).get(ex.status_code, ex.log_message or
                                       httplib.responses[ex.status_code])
         except Exception as ex:
             logging.error("Internal server error.", exc_info=ex)
-            ErrorHandler(request).get(
+            ErrorHandler(self, request).get(
                 500, "{0} \n {1}".format(
                     httplib.responses[500],
                     self.settings.get("debug") and format_exc(ex) or ""))
