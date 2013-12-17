@@ -5,11 +5,6 @@
 RequestHandler: 请求处理基类.
 Context: 所的请求处理类上下文.
 
-TODO:
-
-1. 缓存(HTTP 头).
-2. gzip等功能实现.
-
 """
 
 import re
@@ -107,7 +102,7 @@ class RequestHandler(object):
 
 class Context(object):
     def __init__(self, handlers, **settings):
-        assert isinstance(handlers, dict), "Handlers must be dict."
+        assert isinstance(handlers, dict), "Handler must be dict."
         self.settings = settings
         self._template_path = settings.get("template_path", ".")
         self.handlers = self._handle_url(handlers)

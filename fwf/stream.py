@@ -3,7 +3,6 @@
 """Socket stream.
 
 处理接入的socket流
-TODO: 减少stream处理逻辑.
 
 """
 
