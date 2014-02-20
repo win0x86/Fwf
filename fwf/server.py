@@ -141,5 +141,11 @@ class HTTPRequest(object):
 
 
 class HTTPResponse(object):
-    def __init__(self, url):
-        pass
+    def __init__(self, request, code, headers={}, buf=None
+                 error=None, request_time=None):
+        self.request = request
+        self.code = code
+        self.headers = headers
+        self.buf = buf
+        self.error = error
+        self.request_time = request_time
