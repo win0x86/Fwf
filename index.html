@@ -5,5 +5,14 @@
   </head>
   <body>
     <h1>Hello {{ name }}!</h1>
+    {% try %}
+    {{ int('hello') }}
+    {% except Exception as ex %}
+    {{ str(ex) }}
+    {% end %}
+
+    {% for i in range(10) %}
+    {{ str(i) }}
+    {% end %}
   </body>
 </html>
