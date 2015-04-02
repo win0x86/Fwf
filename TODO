@@ -1,2 +1,2 @@
-1. web.py: gzip, cache etc .
+1. web.py: secure cookie, gzip, cache etc.
 2. server.py httpresponse, http post request.
